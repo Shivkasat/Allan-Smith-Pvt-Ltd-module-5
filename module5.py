@@ -303,7 +303,8 @@ def generate_pdf(excel_path, pdf_path, company_name, equipment_name, feed_rate, 
                     pdf.image(logo_path, x=10, y=20, w=25)
                 except:
                     print(f"[Warning] Could not add logo")
-                
+            FIGPATH="FIG.jpg"
+            pdf.image(FIGPATH, x=100, y=240, w=100)    
             pdf.set_font("Arial", 'B', 16)
             
             title = "Roller shaft deflection Report"
@@ -361,7 +362,7 @@ def generate_pdf(excel_path, pdf_path, company_name, equipment_name, feed_rate, 
                         fig = plt.figure(figsize=(4.5, 4.5))
                         ax = fig.add_subplot(111, polar=True)
                         
-                        radar_title = f"Runout Analysis"
+                        radar_title = f"Roller Raceway eccentricity\n & deformation Polar Graph"
                         create_radar_chart(ax, Run_out_data, radar_title, radar_positions)
                         
                         radar_img_path = f"temp_radar_{sheet_name}.png"
@@ -371,7 +372,7 @@ def generate_pdf(excel_path, pdf_path, company_name, equipment_name, feed_rate, 
                         
                         if os.path.exists(radar_img_path):
                             # FIXED POSITION: Right side, below Result metrics at Y=85
-                            pdf.image(radar_img_path, x=130, y=85, w=65)
+                            pdf.image(radar_img_path, x=130, y=95, w=65)
                             print(f"[Success] Radar chart added at fixed position")
                         
                 except Exception as e:
@@ -473,6 +474,8 @@ def generate_pdf(excel_path, pdf_path, company_name, equipment_name, feed_rate, 
                     plt.plot(df['AI'].dropna(), label='Reference', color='red', linewidth=2)
                     plt.xlabel("Position", fontsize=10)
                     plt.ylabel("Value (mm)", fontsize=10)
+                    plt.title(" Roller shaft deflection linear Graph\n(During single revoluton of Kiln)", fontsize=12, fontweight='bold')
+
                     plt.legend(fontsize=9)
                     plt.grid(True, alpha=0.3)
                     plt.tight_layout()
