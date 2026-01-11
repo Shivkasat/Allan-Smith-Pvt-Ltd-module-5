@@ -283,18 +283,9 @@ def create_radar_chart(ax, Run_out, title, max_positions):
         import traceback
         traceback.print_exc()
 
-def generate_pdf(excel_path, pdf_path, company_name, equipment_name,
-                 feed_rate, date_of_measurement, no_of_pier, radar_positions):
 
-    import os, glob, webbrowser
-    import pandas as pd
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from openpyxl import load_workbook
-    from fpdf import FPDF
-    from tkinter import messagebox
+def generate_pdf(excel_path, pdf_path, company_name, equipment_name, feed_rate, date_of_measurement, no_of_pier, radar_positions):
 
-    # ================= FILE CHECK =================
     if not os.path.exists(excel_path):
         messagebox.showerror("Error", f"Excel file not found: {excel_path}")
         return
@@ -307,7 +298,6 @@ def generate_pdf(excel_path, pdf_path, company_name, equipment_name,
         messagebox.showerror("Error", f"Could not read Excel file: {str(e)}")
         return
 
-    # ================= PDF CLASS =================
     class PDF(FPDF):
         def footer(self):
             self.set_y(-15)
@@ -315,63 +305,102 @@ def generate_pdf(excel_path, pdf_path, company_name, equipment_name,
             self.set_text_color(255, 0, 0)
             self.cell(0, 10, 'Allan Smith Engineering Pvt. Ltd.', 0, 0, 'R')
 
+
     pdf = PDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.set_auto_page_break(auto=True, margin=15)  # Enable auto page break
 
-    filtered_sheet_names = [
-        name for name in sheet_names if name.lower() not in ['summary', 'temp']
-    ]
+    filtered_sheet_names = [name for name in sheet_names if name.lower() not in ['summary', 'temp']]
 
-    if not filtered_sheet_names:
+
+    if len(filtered_sheet_names) == 0:
         messagebox.showerror("Error", "No valid sheets found in Excel file")
         return
 
-    # ================= MAIN LOOP =================
+
+    # ============ COLUMN NAME MAPPING ============
+    column_display_names = {
+        'Position': 'Position',
+        'Measurement': 'Measurement Angle',
+        'Data Measured': 'Data Measured',
+        'Distortion': 'Distortion',
+        'Run Out': 'S.R. Run Out'
+    }
+
+
     for idx, sheet_name in enumerate(filtered_sheet_names):
         try:
+            sheet_num = idx + 1
             df = pd.read_excel(excel_path, sheet_name=sheet_name)
+
+
+            # ============ PAGE 1: HEADER + TABLE ============
             pdf.add_page()
 
-            # ================= LOGO =================
-            if os.path.exists("companylogo.jpg"):
-                pdf.image("companylogo.jpg", x=10, y=20, w=25)
+            logo_path = "companylogo.jpg"
+            if os.path.exists(logo_path):
+                try:
+                    pdf.image(logo_path, x=10, y=20, w=25)
+                except:
+                    print(f"[Warning] Could not add logo")
+            Position = df['Position'].dropna()
 
-            # ================= FIG IMAGE (EVERY PAGE) =================
-            if os.path.exists("FIG.jpg"):
-                pdf.image("FIG.jpg", x=110, y=240, w=100)
-
-            # ================= HEADER =================
-            pdf.set_font("Arial", 'B', 12)
-            pdf.cell(0, 10, "Roller shaft deflection Report", ln=True, align='C')
-
-            pdf.set_font("Arial", 'B', 11)
-            pdf.set_xy(40, 20); pdf.cell(0, 8, f"Company Name: {company_name}", ln=True)
-            pdf.set_xy(40, 25); pdf.cell(0, 8, f"Equipment Name: {equipment_name}", ln=True)
-            pdf.set_xy(40, 30); pdf.cell(0, 8, f"Capacity: {feed_rate}", ln=True)
-            pdf.set_xy(40, 35); pdf.cell(0, 8, f"Date of Measurement: {date_of_measurement}", ln=True)
-            pdf.set_xy(40, 40); pdf.cell(0, 8, "Method: Single Point", ln=True)
-            pdf.set_xy(40, 45); pdf.cell(0, 8, f"No. of Pier: {no_of_pier}", ln=True)
-
-            # ================= LINE GRAPH =================
             if 'Run Out' in df.columns and 'AI' in df.columns:
                 try:
-                    plt.figure(figsize=(7, 3.5))
-                    plt.plot(df['Run Out'].dropna(), label='Actual', linewidth=2)
-                    plt.plot(df['AI'].dropna(), label='Reference', linewidth=2)
-                    plt.xlabel("Position")
-                    plt.ylabel("Value (mm)")
-                    plt.title("Roller shaft deflection linear Graph\n(During single revolution of Kiln)")
-                    plt.legend()
-                    plt.grid(True)
+                    current_y = pdf.get_y()
 
-                    graph_path = f"temp_graph_{sheet_name}.png"
-                    plt.savefig(graph_path, dpi=150)
+                    # If near page end, add new page
+                    if current_y > 200:
+                        pdf.add_page()
+                        current_y = 20
+
+                    plt.figure(figsize=(7, 3.5))
+                    plt.plot(df['Run Out'].dropna(), label='Actual', color='blue', linewidth=2)
+                    plt.plot(df['AI'].dropna(), label='Reference', color='red', linewidth=2)
+                    plt.xlabel("Position", fontsize=10)
+                    plt.ylabel("Value (mm)", fontsize=10)
+                    plt.title(" Roller shaft deflection linear Graph\n(During single revoluton of Kiln)", fontsize=12, fontweight='bold')
+
+
+                    plt.legend(fontsize=9)
+                    plt.grid(True, alpha=0.3)
+                    plt.tight_layout()
+                    if len(Position) > 0:
+                        plt.xticks(np.arange(1, len(Position) + 1, max(1, len(Position)//10)))
+                    graph_img_path = f"temp_graph_{sheet_name}.png"
+                    plt.savefig(graph_img_path, dpi=150)
                     plt.close()
 
-                    if os.path.exists(graph_path):
-                        pdf.image(graph_path, x=110, y=180, w=100)
+
+                    if os.path.exists(graph_img_path):
+                        pdf.image(graph_img_path, x=100, y=180, w=100)
+                        print(f"[Success] Line graph added")
                 except Exception as e:
-                    print("[Graph Error]", e)
+                    print(f"[Error] Generating line graph: {e}")
+            FIGPATH="FIG.jpg"
+            pdf.image(FIGPATH, x=100, y=240, w=100)    
+            pdf.set_font("Arial", 'B', 16)
+
+            title = "Roller shaft deflection Report"
+
+
+            pdf.set_font("Arial", 'B', 12)
+            pdf.cell(0, 10, title, ln=True, align='C')
+
+            pdf.set_font("Arial", 'B', size=11)
+            pdf.set_xy(40, 20)
+            pdf.cell(0, 10, f"Company Name: {company_name}", ln=True)
+            pdf.set_xy(40, 25)
+            pdf.cell(0, 10, f"Equipment Name: {equipment_name}", ln=True)
+            pdf.set_xy(40, 30)
+            pdf.cell(0, 10, f"Capacity: {feed_rate}", ln=True)
+            pdf.set_xy(40, 35)
+            pdf.cell(0, 10, f"Date of Measurement: {date_of_measurement}", ln=True)
+            pdf.set_xy(40, 40)
+            pdf.cell(0, 10, f"Method: Single Point", ln=True)
+            pdf.set_xy(40, 45)
+            pdf.cell(0, 10, f"No. of Pier: {no_of_pier}", ln=True)
+            pdf.ln(10)
+
             try:
                 summary_data = pd.read_excel(excel_path, sheet_name='Summary')
                 angle_of_occurrence_values = summary_data['Phase Angle'].dropna().tolist()
@@ -399,107 +428,141 @@ def generate_pdf(excel_path, pdf_path, company_name, equipment_name,
             pdf.set_xy(140, 76)
             pdf.cell(0, 10, f"Eccentricity = {eccentricity_value:.2f} mm" if isinstance(eccentricity_value, (int, float)) else f"Eccentricity = {eccentricity_value} mm", ln=True, align='R')
 
-            # ================= RADAR CHART =================
-            if 'Run Out' in df.columns and len(df['Run Out'].dropna()) > 2:
+            # ============ RADAR CHART - BELOW RESULT METRICS (FIXED POSITION) ============
+            if 'Run Out' in df.columns:
                 try:
-                    fig = plt.figure(figsize=(4.5, 4.5))
-                    ax = fig.add_subplot(111, polar=True)
-                    create_radar_chart(ax, df['Run Out'].dropna(),
-                                        "Roller Raceway eccentricity\n& deformation Polar Graph",
-                                        radar_positions)
+                    Run_out_data = df['Run Out']
 
-                    radar_path = f"temp_radar_{sheet_name}.png"
-                    plt.savefig(radar_path, dpi=150, bbox_inches='tight')
-                    plt.close()
+                    if len(Run_out_data) > 2:
+                        # Generate radar chart
+                        fig = plt.figure(figsize=(4.5, 4.5))
+                        ax = fig.add_subplot(111, polar=True)
 
-                    if os.path.exists(radar_path):
-                        pdf.image(radar_path, x=130, y=95, w=65)
+                        radar_title = f"Roller Raceway eccentricity\n & deformation Polar Graph"
+                        create_radar_chart(ax, Run_out_data, radar_title, radar_positions)
+
+                        radar_img_path = f"temp_radar_{sheet_name}.png"
+                        plt.tight_layout(pad=1)
+                        plt.savefig(radar_img_path, dpi=150, bbox_inches='tight')
+                        plt.close()
+
+                        if os.path.exists(radar_img_path):
+                            # FIXED POSITION: Right side, below Result metrics at Y=85
+                            pdf.image(radar_img_path, x=130, y=95, w=65)
+                            print(f"[Success] Radar chart added at fixed position")
+
                 except Exception as e:
-                    print("[Radar Error]", e)
+                    print(f"[Error] Generating radar chart for {sheet_name}: {e}")
 
-            # ================= TABLE =================
-            columns_to_print = [c for c in df.columns if c != 'Distortion'][:4]
-            pdf.set_xy(10, 60)
+            # ============ TABLE - LEFT SIDE (WILL AUTO-CONTINUE ON MULTIPLE PAGES) ============
+            columns_to_print = [col for col in df.columns if col != 'Distortion'][:4]
 
+
+            table_start_y = 60
+            pdf.set_xy(10, table_start_y)
             cell_width = 20
-            wide_width = 28
-            cell_h_data = 5
-            cell_h_header = 12
-            line_h = 4
+            cell_height = 5
 
-            header_texts = {
-                'Position': 'Position',
-                'Measurement': 'Measurement\nAngle',
-                'Data Measured': 'Data\nMeasured',
-                'Run Out': 'S.R.\nRun Out'
-            }
+            # ============ TABLE HEADER - WITH RENAMED COLUMNS ============
+            pdf.set_font("Arial", 'B', 8)
+            for col in columns_to_print:
+                # Get display name from mapping, fallback to original if not found
+                display_name = column_display_names.get(col, col)
 
-            def get_col_width(col):
-                return wide_width if col.lower() in ["measurement", "data measured"] else cell_width
+                if col.lower() == "data measured": 
+                    pdf.cell(25, cell_height, str(display_name)[:15], border=1, align='C')
+                else:
+                    pdf.cell(cell_width, cell_height, str(display_name)[:15], border=1, align='C')
+            pdf.ln() 
 
-            def print_table_header():
-                pdf.set_font("Arial", 'B', 8)
-                for col in columns_to_print:
-                    text = header_texts.get(col, col)
-                    width = get_col_width(col)
 
-                    x, y = pdf.get_x(), pdf.get_y()
-                    lines = text.count("\n") + 1
-                    y_offset = y + (cell_h_header - lines * line_h) / 2
-
-                    pdf.rect(x, y, width, cell_h_header)
-                    pdf.set_xy(x, y_offset)
-                    pdf.multi_cell(width, line_h, text, border=0, align='C')
-                    pdf.set_xy(x + width, y)
-                pdf.ln(cell_h_header)
-
-            print_table_header()
+            # Table data - PRINT ALL ROWS
             pdf.set_font("Arial", '', 8)
-
-            for _, row in df.iterrows():
+            for row_idx, row in df.iterrows():
+                # Skip NaN position rows
                 if pd.isna(row['Position']):
                     continue
 
+                # Check if we need new page
                 if pdf.get_y() > 270:
                     pdf.add_page()
                     pdf.set_xy(10, 20)
-                    
-                    print_table_header()
+                    # Reprint header on new page with renamed columns
+                    pdf.set_font("Arial", 'B', 8)
+                    for col in columns_to_print:
+                        display_name = column_display_names.get(col, col)
+                        if col.lower() == "data measured": 
+                            pdf.cell(25, cell_height, str(display_name)[:15], border=1, align='C')
+                        else:
+                            pdf.cell(cell_width, cell_height, str(display_name)[:15], border=1, align='C')
+                    pdf.ln()
                     pdf.set_font("Arial", '', 8)
 
                 for col in columns_to_print:
-                    width = get_col_width(col)
                     val = row[col]
-
                     if pd.isna(val):
-                        txt = "N/A"
-                    elif col.lower() == "position":
-                        txt = str(int(val))
+                        text = "N/A"
+                        width = 25 if col.lower() == "data measured" else cell_width
+                        pdf.cell(width, cell_height, text, border=1, align='C')
+                        continue
+
+                    if col.lower() == "position":
+                        text = f"{int(float(val))}"
+                        pdf.cell(cell_width, cell_height, text[:15], border=1, align='C')
+                    elif col.lower() == "data measured": 
+                        text = f"{float(val):.2f}"
+                        pdf.cell(25, cell_height, text[:15], border=1, align='C')
                     else:
-                        txt = f"{float(val):.2f}"
+                        text = f"{float(val):.2f}"
+                        pdf.cell(cell_width, cell_height, text[:15], border=1, align='C')
+                pdf.ln(cell_height)
 
-                    pdf.cell(width, cell_h_data, txt, border=1, align='C')
-                pdf.ln(cell_h_data)
 
-            # ================= IMAGE BELOW TABLE =================
-            if os.path.exists("TUPDN.jpg"):
-                y = pdf.get_y()
-                if y > 220:
-                    pdf.add_page()
-                    y = 20
-                pdf.image("TUPDN.jpg", x=70, y=y + 5, w=70)
-                pdf.ln(60)
+            print(f"[Success] Table with {len(df)} rows printed")
+
+
+            # ============ IMAGE - BELOW TABLE ============
+            image_path = "TUPDN.jpg"  # Default image for all positions
+
+            if os.path.exists(image_path):
+                try:
+                    current_y = pdf.get_y()
+                    # If near page end, add new page
+                    if current_y > 220:
+                        pdf.add_page()
+                        current_y = 20
+
+                    pdf.image(image_path, x=70, y=current_y + 5, w=70)
+                    pdf.set_font("Arial", 'B', 12)
+                    if isinstance(eccentricity_value, (int, float)):
+                        pdf.set_xy(95, current_y + 52)
+                        pdf.cell(30, 10, f"± {eccentricity_value:.2f} mm", align='C')
+                    pdf.ln(60)
+                except Exception as e:
+                    print(f"[Error] Inserting image: {e}")
+
+
+            # ============ LINE GRAPH - AFTER EVERYTHING ============
+            
 
         except Exception as e:
-            print(f"[Error] Sheet {sheet_name}:", e)
+            print(f"[Error] Processing sheet {sheet_name}: {e}")
+            import traceback
+            traceback.print_exc()
+            continue
 
-    # ================= SAVE PDF =================
-    pdf.output(pdf_path)
 
-    # ================= CLEANUP =================
-    for f in glob.glob("temp_graph_*.png") + glob.glob("temp_radar_*.png"):
+    try:
+        pdf.output(pdf_path)
+        print(f"[Success] PDF generated: {pdf_path}")
+    except Exception as e:
+        messagebox.showerror("Error", f"Could not save PDF: {str(e)}")
+        return
+
+    # Clean up temp files
+    for img_file in glob.glob("temp_graph_*.png") + glob.glob("temp_radar_*.png"):
         try:
-            os.remove(f)
+            os.remove(img_file)
         except:
             pass
 
@@ -508,8 +571,10 @@ def generate_pdf(excel_path, pdf_path, company_name, equipment_name,
     try:
         os.startfile(pdf_path)
     except:
-        webbrowser.open(pdf_path)
-
+        try:
+            webbrowser.open(pdf_path)
+        except:
+            pass
 
 
 
@@ -563,7 +628,7 @@ def show_about():
     about_window.geometry("350x220")
 
 
-    tk.Label(about_window, text="Roller shaft deflection Report Generator", font=('Arial', 12, 'bold')).pack(pady=10)
+    tk.Label(about_window, text="Axial Runout Report Generator", font=('Arial', 14, 'bold')).pack(pady=10)
     tk.Label(about_window, text="Version 1.0", font=('Arial', 10)).pack()
     tk.Label(about_window, text="Developed by Shiv Sunil Kasat", font=('Arial', 12, 'bold')).pack(pady=10)
 
@@ -596,7 +661,7 @@ def show_main_app():
     menu_bar.add_cascade(label="Help", menu=help_menu)
     root.config(menu=menu_bar)
 
-    title_label = tk.Label(root, text="Roller shaft deflection Report Generator", font=('Arial', 16, 'bold'), bg='#2c3e50', fg='white')
+    title_label = tk.Label(root, text="Axial Runout Report Generator", font=('Arial', 16, 'bold'), bg='#2c3e50', fg='white')
     title_label.grid(row=0, column=0, columnspan=3, sticky='ew', pady=(0, 20))
 
     tk.Label(root, text="Select Excel File:", font=('Arial', 10)).grid(row=1, column=0, sticky='w', padx=20, pady=8)
